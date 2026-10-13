@@ -6,7 +6,7 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: sqlite:///:memory:
+      DATABASE_URL: 'sqlite:///:memory:'
       PYTHONPATH: backend
     steps:
       - uses: actions/checkout@v4
