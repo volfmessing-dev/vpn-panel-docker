@@ -1,0 +1,35 @@
+http:
+  middlewares:
+    vpn-panel-auth:
+      basicAuth:
+        usersFile: /auth/users.htpasswd
+
+  routers:
+    vpn-panel-api:
+      entryPoints:
+        - web
+      rule: PathPrefix(`/api`) || Path(`/health`)
+      middlewares:
+        - vpn-panel-auth
+      service: vpn-panel-api
+      priority: 100
+
+    vpn-panel:
+      entryPoints:
+        - web
+      rule: PathPrefix(`/`)
+      middlewares:
+        - vpn-panel-auth
+      service: vpn-panel
+      priority: 1
+
+  services:
+    vpn-panel-api:
+      loadBalancer:
+        servers:
+          - url: http://backend:8000
+
+    vpn-panel:
+      loadBalancer:
+        servers:
+          - url: http://frontend:80

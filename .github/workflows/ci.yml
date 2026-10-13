@@ -1,0 +1,48 @@
+name: Tests and Docker builds
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite:///:memory:
+      PYTHONPATH: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/check-release.py
+      - run: pip install -r backend/requirements.lock && pip install './backend[dev]'
+      - run: pytest -q backend/app/tests
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build && npm run test:node-status && npm run test:auto-refresh
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cp .env.example .env
+          sed -i 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-only-password/' .env
+          mkdir -p secrets/ssh
+          touch secrets/ssh/known_hosts
+          docker run --rm httpd:2.4-alpine htpasswd -nbB admin ci-only-password > traefik/users.htpasswd
+          docker compose config --quiet
+          PANEL_DOMAIN=panel.example.com ACME_EMAIL=admin@example.com docker compose -f docker-compose.tls.yml config --quiet
+          docker compose up -d --build --wait --wait-timeout 120
+          curl --fail --retry 20 --retry-delay 2 --retry-all-errors -u admin:ci-only-password http://localhost:8080/health
+      - if: always()
+        run: docker compose logs --tail=100 && docker compose down
